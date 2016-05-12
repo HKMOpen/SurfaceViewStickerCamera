@@ -1,18 +1,17 @@
 package com.surfaceviewstickercamera.view;
 
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-
 import android.content.ComponentCallbacks2;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
+import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.Camera;
+import android.os.AsyncTask;
 import android.os.Build;
+import android.support.v4.app.FragmentActivity;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -21,8 +20,21 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.View.OnClickListener;
 
-import com.surfaceviewstickercamera.utils.DeviceUtils;
-import com.surfaceviewstickercamera.utils.F;
+import com.surfaceviewstickercamera.utils.Logs;
+import com.surfaceviewstickercamera.utils.TaskProgressDialog;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+
 
 @SuppressWarnings("deprecation")
 public class CameraSurfaceView extends SurfaceView implements OnClickListener
@@ -53,6 +65,12 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 	int curZoomValue = 0;
 	//两个手指按下的距离
 	private float spacingDist;
+	//屏幕宽
+	private int screenWidth=0;
+	//屏幕高
+	private int screenHeight=0;
+	//文件保存
+	private File mPictureFile;
 
 	public CameraSurfaceView(Context context, AttributeSet attrs)
 	{
@@ -74,6 +92,9 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 
 	private void initSurfaceView()
 	{
+		screenWidth=getResources().getDisplayMetrics().widthPixels;
+		screenHeight=getResources().getDisplayMetrics().heightPixels;
+
 		SurfaceHolder surfaceHolder = getHolder();
 		surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 		surfaceHolder.setKeepScreenOn(true);
@@ -84,6 +105,23 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 		getHolder().addCallback(surfaceCallback);
 	}
 
+
+	public String getFlashMode()
+	{
+		return parameters.getFlashMode();
+	}
+
+	public void setFlashMode(String mode)
+	{
+		parameters.setFlashMode(mode);
+		cameraObject.setParameters(parameters);
+		cameraObject.startPreview();
+	}
+
+	public void setPictureFile(File pictureFile)
+	{
+		this.mPictureFile=pictureFile;
+	}
 
 	private final class SurfaceCallback implements SurfaceHolder.Callback
 	{
@@ -118,6 +156,8 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 			{
 				if (cameraObject != null)
 				{
+					parameters.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+					cameraObject.setParameters(parameters);
 					cameraObject.stopPreview();
 					cameraObject.release();
 					cameraObject = null;
@@ -134,6 +174,7 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 	{
 		parameters = cameraObject.getParameters();
 		parameters.setPictureFormat(PixelFormat.JPEG);
+		//parameters.setFlashMode(Camera.Parameters.FLASH_MODE_ON);
 		setUpPicSize(parameters);
 		setUpPreviewSize(parameters);
 		if (pictureSize != null)
@@ -192,7 +233,7 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 			}
 		} catch (Exception e)
 		{
-			F.out("图像出错");
+			Logs.out("图像出错");
 		}
 	}
 
@@ -221,9 +262,9 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 			picResolutionSb.append(supportedPicResolution.width).append('x').append(supportedPicResolution.height).append(" ");
 		}
 
-		F.out("Supported picture resolutions: " + picResolutionSb);
+		Logs.out("Supported picture resolutions: " + picResolutionSb);
 		Camera.Size defaultPictureResolution = cameraParameters.getPictureSize();
-		F.out("default picture resolution " + defaultPictureResolution.width + "x"+ defaultPictureResolution.height);
+		Logs.out("default picture resolution " + defaultPictureResolution.width + "x"+ defaultPictureResolution.height);
 
 		// 排序
 		List<Camera.Size> sortedSupportedPicResolutions = new ArrayList<Camera.Size>(supportedPicResolutions);
@@ -247,7 +288,7 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 		});
 
 		// 移除不符合条件的分辨率
-		double screenAspectRatio = (double) DeviceUtils.getDeviceWidthPixels()/ (double) DeviceUtils.getDeviceHeightPixels();
+		double screenAspectRatio = (double) screenWidth/ (double) screenHeight;
 		Iterator<Camera.Size> it = sortedSupportedPicResolutions.iterator();
 		while (it.hasNext())
 		{
@@ -331,11 +372,11 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 		{
 			previewResolutionSb.append(supportedPreviewResolution.width).append('x').append(supportedPreviewResolution.height).append(' ');
 		}
-		F.out("Supported preview resolutions: " + previewResolutionSb);
+		Logs.out("Supported preview resolutions: " + previewResolutionSb);
 
 		// 移除不符合条件的分辨率
-		double screenAspectRatio = (double) DeviceUtils.getDeviceWidthPixels()
-				/ (double) DeviceUtils.getDeviceHeightPixels();
+		double screenAspectRatio = (double) screenWidth
+				/ (double) screenHeight;
 		Iterator<Camera.Size> it = supportedPreviewResolutions.iterator();
 		while (it.hasNext())
 		{
@@ -365,7 +406,7 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 			}
 
 			// 找到与屏幕分辨率完全匹配的预览界面分辨率直接返回
-			if (maybeFlippedWidth == DeviceUtils.getDeviceWidthPixels()&& maybeFlippedHeight == DeviceUtils.getDeviceHeightPixels())
+			if (maybeFlippedWidth == screenWidth && maybeFlippedHeight == screenHeight)
 			{
 				return supportedPreviewResolution;
 			}
@@ -511,8 +552,8 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 		{
 			List<Camera.Area> areas = new ArrayList<Camera.Area>();
 			//xy变换了
-			int rectY = -x * 2000 / DeviceUtils.getDeviceWidthPixels() + 1000;
-			int rectX = y * 2000 / DeviceUtils.getDeviceHeightPixels() - 1000;
+			int rectY = -x * 2000 / screenWidth + 1000;
+			int rectX = y * 2000 / screenHeight - 1000;
 
 			int left = rectX < -900 ? -1000 : rectX - 100;
 			int top = rectY < -900 ? -1000 : rectY - 100;
@@ -562,8 +603,181 @@ public class CameraSurfaceView extends SurfaceView implements OnClickListener
 	}
 
 
-	public void takePicture(Camera.PictureCallback pictureCallback)
+	private class PictureAsyncTask extends AsyncTask<Void,Void,String>
 	{
-		cameraObject.takePicture(null, null, pictureCallback);
+
+		private byte[] bytes;
+		private TakedPictureCallback pictureCallback;
+		private TaskProgressDialog mTaskDialog;
+
+		public PictureAsyncTask(byte[] bytes,TakedPictureCallback pictureCallback)
+		{
+			this.bytes=bytes;
+			this.pictureCallback=pictureCallback;
+		}
+
+		@Override
+		protected void onPreExecute()
+		{
+			showLoadDialog();
+		}
+
+		@Override
+		protected String doInBackground(Void... voids)
+		{
+			BitmapFactory.Options options = new BitmapFactory.Options();
+			options.inJustDecodeBounds = true;
+			BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+			int width = options.outHeight > options.outWidth ? options.outWidth : options.outHeight;
+			int height = options.outHeight > options.outWidth ? options.outHeight : options.outWidth;
+			Logs.out("width="+width+",height="+height);
+			options.inJustDecodeBounds = false;
+			FileOutputStream outputStream=null;
+			try
+			{
+				if(mPictureFile!=null)
+				{
+					outputStream = new FileOutputStream(mPictureFile);
+					Bitmap croppedImage = decodeRegionCrop(bytes,width,height);
+					croppedImage.compress(Bitmap.CompressFormat.JPEG, 80, outputStream);
+					return mPictureFile.getAbsolutePath();
+				}
+			} catch (Exception e)
+			{
+				e.printStackTrace();
+			}
+			finally
+			{
+				if(outputStream!=null)
+				{
+					try
+					{
+						outputStream.close();
+
+					} catch (IOException e)
+					{
+						e.printStackTrace();
+					}
+				}
+			}
+			return null;
+		}
+
+		@Override
+		protected void onPostExecute(String path)
+		{
+			dismissDialog();
+			pictureCallback.onPictureTacked(path);
+		}
+
+		private void showLoadDialog()
+		{
+			if(getContext() instanceof FragmentActivity)
+			{
+				FragmentActivity fragmentActivity= (FragmentActivity) getContext();
+				if(fragmentActivity!=null && !fragmentActivity.isFinishing())
+				{
+					mTaskDialog = new TaskProgressDialog(fragmentActivity);
+					mTaskDialog.setMessage("处理中,请稍后...");
+					mTaskDialog.setProgressVisiable(true);
+					mTaskDialog.setCancelable(false);
+					mTaskDialog.setCanceledOnTouchOutside(false);
+					mTaskDialog.show();
+				}
+			}
+		}
+
+		private void dismissDialog()
+		{
+			if(getContext() instanceof FragmentActivity)
+			{
+				FragmentActivity fragmentActivity= (FragmentActivity) getContext();
+				if(fragmentActivity!=null && !fragmentActivity.isFinishing())
+				{
+					mTaskDialog.dismiss();
+				}
+			}
+		}
+
+		private Bitmap decodeRegionCrop(byte[] data, int width,int height)
+		{
+			InputStream is = null;
+			System.gc();
+			Bitmap croppedImage = null;
+			try
+			{
+				is = new ByteArrayInputStream(data);
+				BitmapRegionDecoder decoder = BitmapRegionDecoder.newInstance(is, false);
+
+				try
+				{
+					//options
+					BitmapFactory.Options options = new BitmapFactory.Options();
+					//565解码
+					options.inPreferredConfig = Bitmap.Config.RGB_565;
+					//这里的Rect宽高要调换
+					croppedImage = decoder.decodeRegion(new Rect(0, 0, height,width),options);
+					//旋转90度
+					croppedImage=rotateBitmapByDegree(croppedImage,90);
+
+					Logs.out("croppedImage width="+croppedImage.getWidth()+",height="+croppedImage.getHeight());
+				}
+				catch (IllegalArgumentException e)
+				{
+					e.printStackTrace();
+				}
+			} catch (Throwable e)
+			{
+				e.printStackTrace();
+
+			} finally
+			{
+				try
+				{
+					is.close();
+				} catch (IOException e)
+				{
+					e.printStackTrace();
+				}
+			}
+			return croppedImage;
+		}
+
+		public Bitmap rotateBitmapByDegree(Bitmap bm, int degree) {
+			Bitmap returnBm = null;
+
+			// 根据旋转角度，生成旋转矩阵
+			Matrix matrix = new Matrix();
+			matrix.postRotate(degree);
+			try {
+				// 将原始图片按照旋转矩阵进行旋转，并得到新的图片
+				returnBm = Bitmap.createBitmap(bm, 0, 0, bm.getWidth(), bm.getHeight(), matrix, true);
+			} catch (OutOfMemoryError e) {
+				e.printStackTrace();
+				return bm;
+			}
+			if (returnBm != bm) {
+				bm.recycle();
+			}
+			return returnBm;
+		}
+	}
+
+	public void takePicture(final TakedPictureCallback pictureCallback)
+	{
+		cameraObject.takePicture(null, null, new Camera.PictureCallback()
+		{
+			@Override
+			public void onPictureTaken(byte[] bytes, Camera camera)
+			{
+				camera.stopPreview();
+				new PictureAsyncTask(bytes,pictureCallback).execute();
+			}
+		});
+	}
+
+	public static interface TakedPictureCallback
+	{
+		void onPictureTacked(String picturePath);
 	}
 }

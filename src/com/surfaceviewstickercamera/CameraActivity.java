@@ -5,11 +5,12 @@ import android.support.annotation.Nullable;
 import android.support.v4.app.FragmentActivity;
 import android.widget.Toast;
 
-import com.surfaceviewstickercamera.utils.F;
 import com.surfaceviewstickercamera.view.CameraView;
 import com.surfaceviewstickercamera.view.CameraView.CameraViewCallback;
 
-public class CameraActivity extends FragmentActivity implements CameraViewCallback
+import java.io.File;
+
+public class CameraActivity extends FragmentActivity
 {
 	private CameraView cameraView;
 	@Override
@@ -17,25 +18,33 @@ public class CameraActivity extends FragmentActivity implements CameraViewCallba
 	{
 		super.onCreate(arg0);
 		cameraView=new CameraView(this);
+		cameraView.setPictureFile(new File("/mnt/sdcard/test.jpg"));
 		setContentView(cameraView);
-		cameraView.setCameraViewCallback(this);
+		cameraView.setCameraViewCallback(new CameraViewCallback()
+		{
+			@Override
+			public void onLight()
+			{
+				cameraView.toggleLight();
+			}
+
+			@Override
+			public void onCancel()
+			{
+
+			}
+
+			@Override
+			public void onUsePhoto()
+			{
+
+			}
+
+			@Override
+			public void onTakePictured(String picturePath)
+			{
+				Toast.makeText(CameraActivity.this,"picturePath="+picturePath,Toast.LENGTH_LONG).show();
+			}
+		});
 	}
-	@Override
-	public void onBack()
-	{
-		finish();
-	}
-	@Override
-	public void onUsePhoto()
-	{
-		
-	}
-	@Override
-	public void onTakePictured(byte[] data)
-	{
-		F.out("data="+data.length);
-		Toast.makeText(this, "dataLength="+data.length,Toast.LENGTH_LONG).show();
-	}
-	
-	
 }
